@@ -75,9 +75,6 @@ private:
     
     void onEngineShutdown();
     void onTimer();
-    void onStateFork(S2EExecutionState *orignalState, 
-                     const std::vector<S2EExecutionState*>& newState,
-                     const std::vector<klee::ref<klee::Expr>>& condition_);
     void onStateForkDecide(S2EExecutionState *state, 
                            const klee::ref<klee::Expr> &condition_, 
                            bool &allowForking);

@@ -103,7 +103,7 @@ void TICooperator::initialize() {
      * For evaluating each branch condition calculated time in concolic path.
      * In order to restrict execution path in concolic path, we disable state forking.
      * However, we still want to solve branched state condition, to compare the solving 
-     * time and solving result between full symbolic and critical bytes only symboli* 
+     * time and solving result between full symbolic and critical bytes only symbolic.
      * klee::Executor::executeInstruction will handle symbolic execution for each instruction,
      * when instruction is branch instruction, conditional S2EExecutor::fork will be invoked,
      * then S2EExecutor::fork will call S2EExecutor::doFork, when it is condition fork, and 
@@ -118,7 +118,7 @@ void TICooperator::initialize() {
      */
 
     /**
-     * This plugin is designated for exploring paths based the result of taint inference.
+     * This plugin is designated for exploring paths based on the result of taint inference.
      * This plugin will cover following functions:
      * 1. Disable state forking, but still collect the branched state constraints, and solve it.
      *    We reuse most of code in klee::Executor::fork, only without adding the branched state 
@@ -126,12 +126,13 @@ void TICooperator::initialize() {
      * 2. Record the Constraints solving information.
      * 3. Generate testcase for each branched state constraints, this can be done by invoking 
      *    generateTestCase from another plugin TestCaseGenerator.
-     *
+     * 4. Solving branched condtion only when the pc is at the instruction we want.
+     * 
      * taint inference can collects critical bytes for each cmp instruction in current execution 
      * path, therefore these critical bytes are only effective in current path. However, in 
      * symbolic execution, we state forking for each symbolic constraints in branch, each state
      * represents an unique execution path, critical bytes for current state is not effective in 
-     * new state, we need to redo taint inference to obtaint new critical bytes for new stata.
+     * new state, we need to redo taint inference to obtaint new critical bytes for new state.
      * To cooperate with taint inference properly, we choose to disable state fork in branch
      * condition, although still collect constraints and solve it.
      * 
@@ -146,7 +147,6 @@ void TICooperator::initialize() {
 
     // let's try to collect new branch condition and solve it in core event onStateForkDecide.
     s2e()->getCorePlugin()->onStateForkDecide.connect(sigc::mem_fun(*this, &TICooperator::onStateForkDecide));
-    // s2e()->getCorePlugin()->onStateFork.connect(sigc::mem_fun(*this, &TICooperator::onStateFork));
     s2e()->getCorePlugin()->onEngineShutdown.connect(sigc::mem_fun(*this, &TICooperator::onEngineShutdown));
     s2e()->getCorePlugin()->onTimer.connect(sigc::mem_fun(*this, &TICooperator::onTimer));    
 }   
@@ -194,8 +194,7 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
 
     // we have disabled state fork, therefore we need to collect
     // new state fork branch condition and solve them manually.
-    // s2e()->getDebugStream() << "TICooperator: onStateForkDecide\n";
-
+    
     // Evaluate the expression using the current variable assignment
     klee::ref<klee::Expr> evalResult = state->concolics->evaluate(condition);
     ConstantExpr *ce = dyn_cast<ConstantExpr>(evalResult);
@@ -209,8 +208,6 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     for(it = retAddr.begin(); it != retAddr.end(); it++) {
         
         if (abs((long long)(currentPc) - (long long)*it) < 0x10) {
-            //s2e()->getDebugStream() << "omg we find cmp ! " << hexval(currentPc) 
-            //<< " " << hexval(*it) << "\n"; 
             is_uncovered = 1; 
             break;
         }
@@ -314,16 +311,6 @@ void TICooperator::readSelectedRetAddr() {
         retAddr.push_back(instRetAddr);
     }
     ifs.close();
-    /*std::vector<size_t>::iterator it;
-    for(it = retAddr.begin(); it != retAddr.end(); it++) {
-        s2e()->getDebugStream() << "addr: " << hexval(*it) << "\n";
-    }*/
-}
-
-void TICooperator::onStateFork(S2EExecutionState *originalState, 
-                                     const std::vector<S2EExecutionState*> &newSate,
-                                     const std::vector<klee::ref<klee::Expr>> &condition_) {
-
 }
 
 void TICooperator::onSymbolicAddress(S2EExecutionState *state,
