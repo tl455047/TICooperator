@@ -66,6 +66,7 @@ private:
     std::string dirPath;
     std::ofstream *statOfs;
     std::vector<size_t> retAddr;
+    std::set<size_t> isStepped;
 
     typedef std::pair<std::string, std::vector<unsigned char>> VarValuePair;
     typedef std::vector<VarValuePair> ConcreteInputs;
@@ -90,6 +91,7 @@ private:
                           std::vector<std::vector<unsigned char>> &concreteObjects);
     void initTestcaseDirectory();
     void readSelectedRetAddr();
+  
 };
 
 } // namespace plugins
