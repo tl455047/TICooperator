@@ -22,6 +22,7 @@
 
 #include "TICooperator.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <klee/Internal/System/Time.h>
 #include <klee/Solver.h>
@@ -202,21 +203,24 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     bool conditionIsTrue = ce->isTrue();
     
     // check if the cmp is we want
-    size_t currentPc = state->regs()->getPc();
-    std::vector<size_t>::iterator it;
-    bool is_uncovered = 0;
-    for(it = retAddr.begin(); it != retAddr.end(); it++) {
-        
-        if (abs((long long)(currentPc) - (long long)*it) < 0x10) {
-            is_uncovered = 1; 
-            break;
-        }
-        
-    }
-    // if the branch is not we want, skip it
-    if (!is_uncovered) 
-        return;
+    size_t currentPc = state->regs()->getPc(); 
+    auto it = std::find_if(retAddr.begin(), retAddr.end(), 
+        [&currentPc](size_t addr) -> bool
+        {
+            return (std::abs((long long)(currentPc) - (long long)addr) < 0x10);
+        }); 
 
+    if (it == retAddr.end()) {
+      
+      return;
+
+    }
+    else if (isStepped.find(*it) == isStepped.end()) {
+
+        isStepped.emplace(*it);
+    
+    }
+  
     // Build constraints for branched state
     ConstraintManager tmpConstraints = state->constraints();
     if (conditionIsTrue) {
@@ -245,6 +249,9 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
         generateTestcase(state, condition, conditionIsTrue,
                          symbObjects, concreteObjects);
     }
+
+    if (isStepped.size() == retAddr.size())
+        s2e()->getExecutor()->terminateState(*m_currentState, "all requested inst. stepped");
 
 }
 
@@ -311,6 +318,9 @@ void TICooperator::readSelectedRetAddr() {
         retAddr.push_back(instRetAddr);
     }
     ifs.close();
+
+    sort(retAddr.begin(), retAddr.end());
+
 }
 
 void TICooperator::onSymbolicAddress(S2EExecutionState *state,
