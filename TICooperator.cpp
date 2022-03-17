@@ -94,8 +94,8 @@ void TICooperator::initialize() {
     // use TestCaseGenerator
     m_TestCaseGenerator = s2e()->getPlugin<testcases::TestCaseGenerator>();
 
-    // for simple set fixed timeout to 1 hr
-    m_timeout = 3600;
+    // for simple set fixed timeout 
+    m_timeout = 300;
     // for symbolic address
     //s2e()->getCorePlugin()->onSymbolicAddress.connect(sigc::mem_fun(*this, &TICooperator::onSymbolicAddress));
 
