@@ -153,7 +153,22 @@ void TICooperator::initialize() {
 }   
 
 void TICooperator::onEngineShutdown() {
+    std::string failedStatsFilename = s2e()->getOutputDirectory() + "/failed.stats";
+    std::ofstream failedOfs(failedStatsFilename, std::ios::out);
+    
+     if (failedOfs) {
+        for(auto it = retAddr.begin(); it != retAddr.end(); it++) {
+        
+            if (isStepped.find(it->first) == isStepped.end()) {    
+                failedOfs << it->second << "\n";
+            }
+        }
+    }
+
+    failedOfs.close();
+
     onTimer();
+
     statOfs->close();
     delete statOfs;
 }
@@ -205,22 +220,24 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     // check if the cmp is we want
     size_t currentPc = state->regs()->getPc(); 
     auto it = std::find_if(retAddr.begin(), retAddr.end(), 
-        [&currentPc](size_t addr) -> bool
-        {
-            return (std::abs((long long)(currentPc) - (long long)addr) < 0x10);
+        [&currentPc](const std::pair<size_t, unsigned int> &e) -> bool
+        {   
+            if (currentPc < e.first)
+              return false;
+
+            return ((currentPc - e.first) < 0x10);
         }); 
 
     if (it == retAddr.end()) {
-      
+        
       return;
 
     }
-    else if (isStepped.find(*it) == isStepped.end()) {
+    else if (isStepped.find(it->first) == isStepped.end()) {
 
-        isStepped.emplace(*it);
+        isStepped.emplace(it->first);
     
     }
-  
     // Build constraints for branched state
     ConstraintManager tmpConstraints = state->constraints();
     if (conditionIsTrue) {
@@ -247,7 +264,7 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
 
         // generate concrete input for branched condition
         generateTestcase(state, condition, conditionIsTrue,
-                         symbObjects, concreteObjects);
+                         symbObjects, concreteObjects, it->second);
     }
 
     if (isStepped.size() == retAddr.size())
@@ -259,7 +276,8 @@ void TICooperator::generateTestcase(S2EExecutionState *state,
                                           klee::ref<klee::Expr> &condition,
                                           bool conditionIsTrue,
                                           ArrayVec &symbObjects,
-                                          std::vector<std::vector<unsigned char>> &concreteObjects) {
+                                          std::vector<std::vector<unsigned char>> &concreteObjects, 
+                                          unsigned int cmpId) {
     // create branched state and use it to solve concrete input,
     // we won't add the branched state to addedState.    
     ExecutionState *branchedState;
@@ -285,7 +303,7 @@ void TICooperator::generateTestcase(S2EExecutionState *state,
     
     S2EExecutionState *newState = static_cast<S2EExecutionState *>(branchedState);
     char idStr[32];
-    std::snprintf(idStr, 32, "/id:%06u", newState->getID() - 1);
+    std::snprintf(idStr, 32, "/id:%06u-%u", newState->getID() - 1, cmpId);
 
     // generate concrete input through branched state condition
     m_TestCaseGenerator->generateTestCases(newState, std::string(idStr), testcases::TestCaseType::TC_FILE);
@@ -310,17 +328,15 @@ void TICooperator::initTestcaseDirectory() {
 void TICooperator::readSelectedRetAddr() {
     std::ifstream ifs("ret_addr");
     size_t instRetAddr;
+    unsigned int cmpId;
     if (!ifs) {
         s2e()->getDebugStream() << "Unable to open ret_addr\n";
     }
     while(!ifs.eof()) {
-        ifs >> std::hex >> instRetAddr;
-        retAddr.push_back(instRetAddr);
+        ifs >> std::hex >> instRetAddr >> std::dec >> cmpId;
+        retAddr.emplace(std::make_pair(instRetAddr, cmpId));
     }
     ifs.close();
-
-    sort(retAddr.begin(), retAddr.end());
-
 }
 
 void TICooperator::onSymbolicAddress(S2EExecutionState *state,

@@ -65,7 +65,7 @@ private:
     
     std::string dirPath;
     std::ofstream *statOfs;
-    std::vector<size_t> retAddr;
+    std::map<size_t, unsigned int> retAddr;
     std::set<size_t> isStepped;
 
     typedef std::pair<std::string, std::vector<unsigned char>> VarValuePair;
@@ -88,7 +88,8 @@ private:
                           klee::ref<klee::Expr> &condition, 
                           bool conditionIsTrue, 
                           ArrayVec &symbObjects, 
-                          std::vector<std::vector<unsigned char>> &concreteObjects);
+                          std::vector<std::vector<unsigned char>> &concreteObjects, 
+                          unsigned int cmpId);
     void initTestcaseDirectory();
     void readSelectedRetAddr();
   
