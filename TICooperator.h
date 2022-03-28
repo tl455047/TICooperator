@@ -65,8 +65,8 @@ private:
     
     std::string dirPath;
     std::ofstream *statOfs;
-    std::map<size_t, unsigned int> retAddr;
-    std::set<size_t> isStepped;
+    std::map<uint64_t, unsigned int> retAddr;
+    std::set<uint64_t> isStepped;
 
     typedef std::pair<std::string, std::vector<unsigned char>> VarValuePair;
     typedef std::vector<VarValuePair> ConcreteInputs;
@@ -89,7 +89,7 @@ private:
                           bool conditionIsTrue, 
                           ArrayVec &symbObjects, 
                           std::vector<std::vector<unsigned char>> &concreteObjects, 
-                          unsigned int cmpId);
+                          uint64_t ret_addr, unsigned int cmpId);
     void initTestcaseDirectory();
     void readSelectedRetAddr();
   

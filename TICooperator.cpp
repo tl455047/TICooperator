@@ -96,7 +96,7 @@ void TICooperator::initialize() {
     m_TestCaseGenerator = s2e()->getPlugin<testcases::TestCaseGenerator>();
 
     // for simple set fixed timeout 
-    m_timeout = 600;
+    m_timeout = 3600;
     // for symbolic address
     //s2e()->getCorePlugin()->onSymbolicAddress.connect(sigc::mem_fun(*this, &TICooperator::onSymbolicAddress));
 
@@ -155,13 +155,17 @@ void TICooperator::initialize() {
 void TICooperator::onEngineShutdown() {
     std::string failedStatsFilename = s2e()->getOutputDirectory() + "/failed.stats";
     std::ofstream failedOfs(failedStatsFilename, std::ios::out);
+    unsigned int solvedBranch = 0, failedBranch = 0;
     
-     if (failedOfs) {
+    if (failedOfs) {
         for(auto it = retAddr.begin(); it != retAddr.end(); it++) {
         
             if (isStepped.find(it->first) == isStepped.end()) {    
-                failedOfs << it->second << "\n";
+                failedOfs << std::hex << it->first << " " << std::dec << it->second << "\n";
+                failedBranch++;
             }
+            else 
+                solvedBranch++;
         }
     }
 
@@ -169,6 +173,8 @@ void TICooperator::onEngineShutdown() {
 
     onTimer();
 
+    *statOfs << klee::util::getUserTime() << "," 
+             << solvedBranch << "," << failedBranch << "," << retAddr.size() << "\n";
     statOfs->close();
     delete statOfs;
 }
@@ -218,9 +224,9 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     bool conditionIsTrue = ce->isTrue();
     
     // check if the cmp is we want
-    size_t currentPc = state->regs()->getPc(); 
+    uint64_t currentPc = state->regs()->getPc(); 
     auto it = std::find_if(retAddr.begin(), retAddr.end(), 
-        [&currentPc](const std::pair<size_t, unsigned int> &e) -> bool
+        [&currentPc](const std::pair<uint64_t, unsigned int> &e) -> bool
         {   
             if (currentPc < e.first)
               return false;
@@ -228,15 +234,25 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
             return ((currentPc - e.first) < 0x10);
         }); 
 
+    uint64_t ret_addr;
+    unsigned int cmpId;
+
     if (it == retAddr.end()) {
-        
+        ret_addr = currentPc;
+        cmpId = 0;
+    }
+    else {
+        ret_addr = it->first;
+        cmpId = it->second;
+    }
+    if (it == retAddr.end()) {
+      
       return;
 
     }
     else if (isStepped.find(it->first) == isStepped.end()) {
 
         isStepped.emplace(it->first);
-    
     }
     // Build constraints for branched state
     ConstraintManager tmpConstraints = state->constraints();
@@ -264,7 +280,7 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
 
         // generate concrete input for branched condition
         generateTestcase(state, condition, conditionIsTrue,
-                         symbObjects, concreteObjects, it->second);
+                         symbObjects, concreteObjects, ret_addr, cmpId);
     }
 
     if (isStepped.size() == retAddr.size())
@@ -277,7 +293,7 @@ void TICooperator::generateTestcase(S2EExecutionState *state,
                                           bool conditionIsTrue,
                                           ArrayVec &symbObjects,
                                           std::vector<std::vector<unsigned char>> &concreteObjects, 
-                                          unsigned int cmpId) {
+                                          uint64_t ret_addr, unsigned int cmpId) {
     // create branched state and use it to solve concrete input,
     // we won't add the branched state to addedState.    
     ExecutionState *branchedState;
@@ -303,7 +319,7 @@ void TICooperator::generateTestcase(S2EExecutionState *state,
     
     S2EExecutionState *newState = static_cast<S2EExecutionState *>(branchedState);
     char idStr[32];
-    std::snprintf(idStr, 32, "/id:%06u-%u", newState->getID() - 1, cmpId);
+    std::snprintf(idStr, 32, "/id:%06u-%lx-%u", newState->getID() - 1, ret_addr, cmpId);
 
     // generate concrete input through branched state condition
     m_TestCaseGenerator->generateTestCases(newState, std::string(idStr), testcases::TestCaseType::TC_FILE);
