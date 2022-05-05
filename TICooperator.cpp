@@ -96,7 +96,7 @@ void TICooperator::initialize() {
     m_TestCaseGenerator = s2e()->getPlugin<testcases::TestCaseGenerator>();
 
     // for simple set fixed timeout 
-    m_timeout = 3600;
+    m_timeout = 3600000;
     // for symbolic address
     //s2e()->getCorePlugin()->onSymbolicAddress.connect(sigc::mem_fun(*this, &TICooperator::onSymbolicAddress));
 
@@ -202,7 +202,7 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     if (allowForking) {
         allowForking = false;
     }
-    
+     
     if (m_currentState == nullptr)
         m_currentState = static_cast<klee::ExecutionState *>(state);
 
@@ -213,16 +213,9 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
     if (auto ce = dyn_cast<ConstantExpr>(condition)) {
         return;
     }
-
+    
     // we have disabled state fork, therefore we need to collect
     // new state fork branch condition and solve them manually.
-    
-    // Evaluate the expression using the current variable assignment
-    klee::ref<klee::Expr> evalResult = state->concolics->evaluate(condition);
-    ConstantExpr *ce = dyn_cast<ConstantExpr>(evalResult);
-    check(ce, "Could not evaluate the expression to a constant.");
-    bool conditionIsTrue = ce->isTrue();
-    
     // check if the cmp is we want
     uint64_t currentPc = state->regs()->getPc(); 
     auto it = std::find_if(retAddr.begin(), retAddr.end(), 
@@ -233,11 +226,12 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
 
             return ((currentPc - e.first) < 0x10);
         }); 
-
+    
     uint64_t ret_addr;
     unsigned int cmpId;
-
+         
     if (it == retAddr.end()) {
+
         ret_addr = currentPc;
         cmpId = 0;
     }
@@ -245,15 +239,24 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
         ret_addr = it->first;
         cmpId = it->second;
     }
+
     if (it == retAddr.end()) {
       
       return;
 
     }
     else if (isStepped.find(it->first) == isStepped.end()) {
-
+        
         isStepped.emplace(it->first);
+    
     }
+
+    // Evaluate the expression using the current variable assignment
+    klee::ref<klee::Expr> evalResult = state->concolics->evaluate(condition);
+    ConstantExpr *ce = dyn_cast<ConstantExpr>(evalResult);
+    check(ce, "Could not evaluate the expression to a constant.");
+    bool conditionIsTrue = ce->isTrue();
+
     // Build constraints for branched state
     ConstraintManager tmpConstraints = state->constraints();
     if (conditionIsTrue) {
@@ -283,8 +286,8 @@ void TICooperator::onStateForkDecide(S2EExecutionState *state,
                          symbObjects, concreteObjects, ret_addr, cmpId);
     }
 
-    if (isStepped.size() == retAddr.size())
-        s2e()->getExecutor()->terminateState(*m_currentState, "all requested inst. stepped");
+    /*if (isStepped.size() == retAddr.size())
+        s2e()->getExecutor()->terminateState(*m_currentState, "all requested inst. stepped");*/
 
 }
 
